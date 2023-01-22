@@ -5,15 +5,98 @@ import matplotlib
 if os.name == "darwin":
     matplotlib.use("MacOSX")  # for mac
 else:
-    matplotlib.use("TkAgg") # for unix/windows
+    matplotlib.use("TkAgg")  # for unix/windows
 
 import matplotlib.pyplot as plt
-plt.rcParams["figure.figsize"] = (15, 15) # size of window
-plt.ion() # interactive mode
+
+plt.rcParams["figure.figsize"] = (15, 15)  # size of window
+plt.ion()  # interactive mode
 plt.style.use('dark_background')
 
 
 # TODO add class structures
+
+class SingletonMeta(type):
+    _instances = {}
+
+    def __call__(cls, *args, **kwargs):
+        if cls not in cls._instances:
+            instance = super().__call__(*args, **kwargs)
+            cls._instances[cls] = instance
+        return cls._instances[cls]
+
+
+class StaticObject:  # https://refactoring.guru/design-patterns/singleton/python/example
+    def __init__(self):
+        self.vec_pos = np.array([0., 0.])
+        self.vec_dir_init = np.array([0., 0.])
+        self.vec_dir = np.array([0., 0.])
+        self.geometry = [
+            np.array([-1, -1]),
+            np.array([-1, 1]),
+            np.array([1, 1]),
+            np.array([1, -1]),
+            np.array([-1, -1]),
+        ]
+        self.__angle = 0.
+
+    def set_angle(self, angle) -> None:
+        pass
+
+    def get_angle(self) -> float:
+        pass
+
+    def update_movement(self, delta_time: float) -> None:
+        pass
+
+    def draw(self) -> None:
+        pass
+
+
+class Planet(StaticObject):
+    def __init__(self):
+        super().__init__()
+
+    def update_movement(self, delta_time: float) -> None:
+        pass
+
+
+class MovableObject(StaticObject):
+    def __init__(self):
+        super().__init__()
+        self.speed = 0.
+
+    def update_movement(self, delta_time: float) -> None:
+        pass
+
+
+class Asteroid(MovableObject):
+    def __init__(self):
+        super().__init__()
+
+    def update_movement(self, delta_time: float) -> None:
+        pass
+
+
+class Player(MovableObject, metaclass=SingletonMeta):
+    def __init__(self):
+        super().__init__()
+        self.rockets = [Rocket()]
+
+    def activate_thrusters(self) -> None:
+        pass
+
+    def fire_rocket(self) -> None:
+        pass
+
+    def update_movement(self, delta_time) -> None:
+        pass
+
+
+class Rocket(MovableObject):
+    def update_movement(self, delta_time) -> None:
+        pass
+
 
 class Dummy():
     def __init__(self):
@@ -37,17 +120,18 @@ class Dummy():
             y_data.append(vec2[1])
         plt.plot(x_data, y_data)
 
-class Game:
+
+class Game(metaclass=SingletonMeta):
     def __init__(self):
         super(Game, self).__init__()
         self.is_running = True
         self.score = 0
         self.lives = 0
 
-        self.actors = [Dummy()] # TODO add Player, Planets and Asteroids
+        self.actors = [Player(), Planet(), Asteroid()]  # TODO add Player, Planets and Asteroids
 
     def press(self, event):
-        player = None  # TODO get player
+        player = Player()  # TODO get player
         print('press', event.key)
         if event.key == 'escape':
             self.is_running = False  # quits app
@@ -77,11 +161,12 @@ class Game:
             plt.ylim(-10, 10)
 
             for actor in self.actors:  # polymorhism
-                actor.update_movment(dt)
+                actor.update_movement(dt)
                 actor.draw()
 
             plt.draw()
             plt.pause(dt)
+
 
 game = Game()
 game.main()
