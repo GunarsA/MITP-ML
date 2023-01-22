@@ -16,7 +16,7 @@ plt.style.use('dark_background')
 
 # TODO add class structures
 
-class SingletonMeta(type):
+class SingletonMeta(type):  # https://refactoring.guru/design-patterns/singleton/python/example
     _instances = {}
 
     def __call__(cls, *args, **kwargs):
@@ -26,7 +26,7 @@ class SingletonMeta(type):
         return cls._instances[cls]
 
 
-class StaticObject:  # https://refactoring.guru/design-patterns/singleton/python/example
+class StaticObject:
     def __init__(self):
         self.vec_pos = np.array([0., 0.])
         self.vec_dir_init = np.array([0., 0.])
