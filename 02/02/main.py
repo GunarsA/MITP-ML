@@ -30,22 +30,30 @@ def rotation_mat(degrees):
 
 
 def translation_mat(dx, dy):
-    T = np.identity(3)  # TODO
-    return T
+    return np.array([
+        [1, 0, dx],
+        [0, 1, dy],
+        [0, 0, 1]
+    ])
 
 
 def scale_mat(sx, sy):
-    S = np.identity(3)  # TODO
-    return S
+    return np.array([
+        [sx, 0, 0],
+        [0, sy, 0],
+        [0, 0, 1]
+    ])
 
 
 def scew_mat(x, y):
-    W = np.identity(3)  # TODO
-    return W
+    return np.array([
+        [1, y, 0],
+        [x, 1, 0],
+        [0, 0, 1]
+    ])
 
 
 def dot(X, Y):
-
     is_transposed = False
 
     X = np.atleast_2d(X)
@@ -93,7 +101,7 @@ def vec3d_to_vec2d(vec3):
 
 
 class StaticObject:
-    def __init__(self, vec_pos):
+    def __init__(self, vec_pos, T_centered=np.identity(3)):
         self.vec_pos: np.ndarray = vec_pos.astype(np.float)
         self.vec_dir_init = np.array([0.0, 1.0])
         self.vec_dir = np.array(self.vec_dir_init)
@@ -105,6 +113,7 @@ class StaticObject:
         self.R = np.identity(3)
         self.S = np.identity(3)
         self.T = np.identity(3)
+        self.T_centered = T_centered
 
         self.update_transformation()
 
@@ -128,6 +137,8 @@ class StaticObject:
         self.T = translation_mat(self.vec_pos[0], self.vec_pos[1])
 
         self.C = np.identity(3)
+        self.C = self.S @ self.C
+        self.C = self.T_centered @ self.C
         self.C = self.R @ self.C
         self.C = self.T @ self.C
         # TODO chain together R, T, S in C using correct order!
@@ -155,27 +166,58 @@ class Planet(StaticObject):
         self.color = 'b'
         self.vec_F = np.zeros(2, )  # panet gravity force
 
-        step = 2 * np.pi / 20
+        step = 0.01
         self.radius = np.random.random() * 0.5 + 1.0
         self.geometry = []
-        theta = 0
-        while theta < 2 * np.pi:
-            self.geometry.append(np.array([
-                np.cos(theta) * self.radius,
-                np.sin(theta) * self.radius
-            ]))
-            theta += step
-        self.geometry.append(np.array(self.geometry[0]))
+
+        x = self.radius
+        y = 0
+
+        self.geometry.append(np.array([x, y]))
+
+        P = step - self.radius
+
+        while x > y:
+
+            y += step
+
+            if P <= 0:
+                P = P + 2 * y + step
+
+            else:
+                x -= step
+                P = P + 2 * y - 2 * x + step
+
+            if (x < y):
+                break
+
+            self.geometry.append(np.array([x, y]))
+
+        temp = [np.array([vec[1], vec[0]]) for vec in self.geometry]
+        temp.reverse()
+        self.geometry += temp
+        temp = [np.array([-vec[0], vec[1]]) for vec in self.geometry]
+        temp.reverse()
+        self.geometry += temp
+        temp = [np.array([vec[0], -vec[1]]) for vec in self.geometry]
+        temp.reverse()
+        self.geometry += temp
+        self.geometry.append(self.geometry[0])
+
         self.update_transformation()
 
     def update_movement(self, delta_time: float):
-        # TODO implement gravity calculation with regards to player
-        self.vec_F = np.zeros(2, )
+        player_pos = Player.get_instance().vec_pos
+        dist_vec = self.vec_pos - player_pos
+        vec_dir = dist_vec / np.linalg.norm(dist_vec)
+        dist = np.sqrt(dist_vec[0] ** 2 + dist_vec[1] ** 2)
+        gravity = (200 * self.radius) / (dist ** 2)
+        self.vec_F = np.array([gravity * vec_dir[0], gravity * vec_dir[1]])
 
 
 class MovableObject(StaticObject):
-    def __init__(self, vec_pos):
-        super().__init__(vec_pos)
+    def __init__(self, vec_pos, T_centered=np.identity(3)):
+        super().__init__(vec_pos, T_centered)
         self.speed = 0
 
     def update_movement(self, delta_time: float):
@@ -241,7 +283,9 @@ class Player(MovableObject):
     _instance: Player = None
 
     def __init__(self, vec_pos):
-        super().__init__(vec_pos)
+        T_centered = translation_mat(dx=0, dy=-0.25)
+
+        super().__init__(vec_pos, T_centered)
         self.geometry = np.array([
             [-1, 0],
             [1, 0],
@@ -249,8 +293,7 @@ class Player(MovableObject):
             [-1, 0]
         ])
 
-        T_centered = translation_mat(dx=0, dy=-0.5)
-        self.S = np.dot(scale_mat(sx=0.2, sy=0.5), T_centered)
+        self.S = scale_mat(sx=0.25, sy=0.5)
         self.speed = 0
         self.update_transformation()
 
@@ -260,14 +303,14 @@ class Player(MovableObject):
             raise Exception("Cannot construct singleton twice")
 
     def activate_thrusters(self):
-        self.speed += 50.0
+        self.speed += 10.0
 
     def fire_rocket(self):
         rocket = Rocket(self.vec_pos)
         Game.get_instance().actors.append(rocket)
 
     def update_movement(self, delta_time: float):
-        self.speed -= delta_time * 30.0
+        self.speed -= delta_time * 300.0
         self.speed = max(0, self.speed)
 
         for actor in Game.get_instance().actors:
@@ -334,7 +377,7 @@ class Game:
         fig, _ = plt.subplots()
         fig.canvas.mpl_connect("key_press_event", self.press)
         fig.canvas.mpl_connect("close_event", self.on_close)
-        dt = 1e-3
+        dt = 1e-2
 
         while self.is_running:
             plt.clf()
@@ -351,8 +394,30 @@ class Game:
                 actor.update_movement(dt)
                 actor.draw()
 
+            for actor in self.actors:
+                if isinstance(actor, Player):
+                    for actor2 in self.actors:
+                        if isinstance(actor2, Planet) or isinstance(actor2, Asteroid):
+                            if (abs(actor.vec_pos[0] - actor2.vec_pos[0]) + abs(actor.vec_pos[1] - actor2.vec_pos[1])) < 1:
+                                self.is_running = False
+                                plt.draw()
+                                print("Game over")
+                                exit(0)
+                    break
+
+            for actor in self.actors:
+                if isinstance(actor, Rocket):
+                    for actor2 in self.actors:
+                        if isinstance(actor2, Asteroid):
+                            if (abs(actor.vec_pos[0] - actor2.vec_pos[0]) + abs(actor.vec_pos[1] - actor2.vec_pos[1])) < 1:
+                                self.actors.remove(actor2)
+
+
+
             plt.draw()
             plt.pause(dt)
+
+        print(self.score)
 
     @staticmethod
     def get_instance() -> Game:
