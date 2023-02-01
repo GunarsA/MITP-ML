@@ -74,12 +74,21 @@ def dot(X, Y):
 
 
 def vec2d_to_vec3d(vec2):
-    vec3 = np.array([vec2[0], vec2[1], 0])  # TODO replace with matrix operations
+    I = np.array([
+        [1, 0],
+        [0, 1],
+        [0, 0]
+    ])
+    vec3 = np.dot(I, vec2) + np.array([0, 0, 1])
     return vec3
 
 
 def vec3d_to_vec2d(vec3):
-    vec2 = np.array([vec3[0], vec3[1]])  # TODO replace with matrix operations
+    I = np.array([
+        [1, 0, 0],
+        [0, 1, 0]
+    ])
+    vec2 = np.dot(I, vec3)
     return vec2
 
 
