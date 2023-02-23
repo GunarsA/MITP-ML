@@ -180,12 +180,12 @@ class LayerReLU:
         self.output = None
 
     def forward(self, x: Variable):
-        self.x = x  # TODO
-        self.output = None
+        self.x = x
+        self.output = Variable(self.x.value * (self.x.value >= 0))
         return self.output
 
     def backward(self):
-        self.x.grad += 1  # TODO
+        self.x.grad += 1.0 * (self.output.value >= 0) * self.output.grad
 
 
 class LossMSE:
@@ -223,9 +223,9 @@ class Model:
     def __init__(self):
         self.layers = [
             LayerLinear(in_features=6, out_features=4),
-            LayerSigmoid(),
+            LayerReLU(),
             LayerLinear(in_features=4, out_features=4),
-            LayerSigmoid(),
+            LayerReLU(),
             LayerLinear(in_features=4, out_features=2)
         ]
 
@@ -281,6 +281,11 @@ class LayerEmbedding:
         self.emb_m.grad[self.x_indexes, :] += self.output.grad
 
 
+def nrmse_metric(y: Variable, y_prim : Variable):
+    rmse = np.sqrt(np.mean(y.value - y_prim.value) ** 2)
+    return rmse / np.std(y.value)
+
+
 model = Model()
 optimizer = OptimizerSGD(
     model.parameters(),
@@ -290,16 +295,20 @@ loss_fn = LossMSE()
 
 loss_plot_train = []
 loss_plot_test = []
+nrmse_plot_test = []
 for epoch in range(1, 1000):
 
     for dataloader in [dataloader_train, dataloader_test]:
         losses = []
+        nrmse_list = []
         for x, y in dataloader:
 
             y_prim = model.forward(x=Variable(value=x))
             loss = loss_fn.forward(y=Variable(value=y), y_prim=y_prim)
+            nrmse = nrmse_metric(y=Variable(value=y), y_prim=y_prim)
 
             losses.append(loss)
+            nrmse_list.append(nrmse)
 
             if dataloader == dataloader_train:
                 loss_fn.backward()
@@ -312,6 +321,7 @@ for epoch in range(1, 1000):
             loss_plot_train.append(np.mean(losses))
         else:
             loss_plot_test.append(np.mean(losses))
+            nrmse_plot_test.append(np.mean(nrmse_list))
 
     print(f'epoch: {epoch} loss_train: {loss_plot_train[-1]} loss_test: {loss_plot_test[-1]}')
 
@@ -320,8 +330,11 @@ for epoch in range(1, 1000):
         ax1.plot(loss_plot_train, 'r-', label='train')
         ax2 = ax1.twinx()
         ax2.plot(loss_plot_test, 'c-', label='test')
+        ax3 = ax1.twinx()
+        ax3.plot(nrmse_plot_test, 'y-', label='nrmse')
         ax1.legend()
         ax2.legend(loc='upper left')
+        ax2.legend(loc='upper right')
         ax1.set_xlabel("Epoch")
         ax1.set_ylabel("Loss")
         plt.show()

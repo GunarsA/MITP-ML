@@ -180,12 +180,12 @@ class LayerReLU:
         self.output = None
 
     def forward(self, x: Variable):
-        self.x = x  # TODO
-        self.output = None
+        self.x = x
+        self.output = Variable(self.x.value * (self.x.value >= 0))
         return self.output
 
     def backward(self):
-        self.x.grad += 1  # TODO
+        self.x.grad += 1.0 * (self.output.value >= 0) * self.output.grad
 
 
 class LossMSE:
@@ -223,9 +223,9 @@ class Model:
     def __init__(self):
         self.layers = [
             LayerLinear(in_features=6, out_features=4),
-            LayerSigmoid(),
+            LayerReLU(),
             LayerLinear(in_features=4, out_features=4),
-            LayerSigmoid(),
+            LayerReLU(),
             LayerLinear(in_features=4, out_features=2)
         ]
 
