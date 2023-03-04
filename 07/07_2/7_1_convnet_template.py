@@ -99,8 +99,7 @@ dataloader_test = torch.utils.data.DataLoader(
 
 
 def get_out_size(in_size, padding, kernel_size, stride):
-    # TODO implement formula
-    return 0
+    return int((in_size + 2 * padding - kernel_size) / stride) + 1
 
 
 class Conv2d(torch.nn.Module):
@@ -113,7 +112,8 @@ class Conv2d(torch.nn.Module):
         self.padding = padding
 
         self.K = torch.nn.Parameter(
-            torch.FloatTensor(1, )  # TODO set correct
+            # learnable params never have batch size
+            torch.FloatTensor(kernel_size, kernel_size, in_channels, out_channels)
         )
         torch.nn.init.kaiming_uniform_(self.K)
 
@@ -121,7 +121,39 @@ class Conv2d(torch.nn.Module):
         batch_size = x.size(0)
         in_size = x.size(-1)
         out_size = get_out_size(in_size, self.padding, self.kernel_size, self.stride)
-        out = x  # TODO
+
+        out = torch.zeros(batch_size, self.out_channels, out_size, out_size)
+
+        x_padded_size = in_size + 2 * self.padding
+        if not self.passing:
+            x_padded = x
+        else:
+            x_padded = torch.zeros(batch_size, self.in_channels, x_padded_size, x_padded_size)
+            x_padded[:, :, self.padding:-self.padding, self.padding:-self.padding] = x
+
+        K = self.K.reshape(-1, self.out_channels)
+
+        i_out = 0
+        for i in range(0, x_padded_size - self.kernel_size - 1, self.stride):
+            j_out = 0
+            for j in range(0, x_padded_size - self.kernel_size - 1, self.stride):
+                x_part = x_padded[:, :, i:i + self.kernel_size, j: j + self.kernel_size]
+                x_part = x_part.reshape(batch_size, K.size(0))
+
+                # K.t() = (OUT, IN)
+                # x_part = (B, IN) => (B, IN, 1)
+                # out_part = (B, OUT)
+                out_part = (K.t() @ x_part.unsqueeze(dim=2)).squeeze(dim=2)
+
+                # max pool
+                # x_part = torch.max(x_part, dim=-1).values
+
+
+                out[:, :, i_out, j_out] = out_part
+
+                j_out += 1
+            i_out += 1
+
         return out
 
 
@@ -183,15 +215,27 @@ class Model(torch.nn.Module):
         super().__init__()
 
         self.encoder = torch.nn.Sequential(
-            # TODO
+            Conv2d(in_channels=3, out_channels=5, kernel_size=3, stride=2, padding=1),
+            torch.nn.ReLU(),
+            Conv2d(in_channels=5, out_channels=10, kernel_size=3, stride=2, padding=1),
+            torch.nn.ReLU(),
+            Conv2d(in_channels=10, out_channels=15, kernel_size=3, stride=2, padding=1)
         )
-        self.fc = torch.nn.Linear(  # TODO
-            in_features=1,
-            out_features=1
+
+        out_1 = get_out_size(dataset_full.input_size, kernel_size=3, stride=2, padding=1)
+        out_2 = get_out_size(out_1, kernel_size=3, stride=2, padding=1)
+        out_3 = get_out_size(out_2, kernel_size=3, stride=2, padding=1)
+
+        self.fc = torch.nn.Linear(
+            in_features=15 * out_3 * out_3,
+            out_features=len(dataset_full.labels)
         )
 
     def forward(self, x):
-        y_prim = x  # TODO
+        out = self.encoder.forward(x)
+        out_flat = out.view(x.size(0), -1)  # (B, 15 * out_3 * out_3)
+        logits = self.fc.forward(out_flat)
+        y_prim = torch.softmax(logits, dim=1)
         return y_prim
 
 
@@ -230,8 +274,7 @@ for epoch in range(1, 100):
             y_idx = y.cpu().data.numpy().argmax(axis=-1)
             w = torch.FloatTensor(dataset_full.Y_weights[y_idx]).unsqueeze(dim=-1).to(DEVICE)
 
-            # TODO implement CCE
-            loss = 0
+            loss = torch.mean(-y * w * torch.log(y_prim * 1e-8))
 
             if data_loader == dataloader_train:
                 loss.backward()
