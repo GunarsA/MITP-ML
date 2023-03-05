@@ -27,7 +27,6 @@ if torch.cuda.is_available():
     DEVICE = 'cuda'
     MAX_LEN = 0
 
-
 class Dataset(torch.utils.data.Dataset):
     def __init__(self):
         super().__init__()
@@ -125,7 +124,7 @@ class Conv2d(torch.nn.Module):
         out = torch.zeros(batch_size, self.out_channels, out_size, out_size)
 
         x_padded_size = in_size + 2 * self.padding
-        if not self.passing:
+        if not self.padding:
             x_padded = x
         else:
             x_padded = torch.zeros(batch_size, self.in_channels, x_padded_size, x_padded_size)
@@ -147,7 +146,6 @@ class Conv2d(torch.nn.Module):
 
                 # max pool
                 # x_part = torch.max(x_part, dim=-1).values
-
 
                 out[:, :, i_out, j_out] = out_part
 
@@ -215,16 +213,16 @@ class Model(torch.nn.Module):
         super().__init__()
 
         self.encoder = torch.nn.Sequential(
-            Conv2d(in_channels=3, out_channels=5, kernel_size=3, stride=2, padding=1),
+            Conv2d(in_channels=3, out_channels=5, kernel_size=5, stride=1, padding=1),
             torch.nn.ReLU(),
-            Conv2d(in_channels=5, out_channels=10, kernel_size=3, stride=2, padding=1),
+            Conv2d(in_channels=5, out_channels=10, kernel_size=5, stride=1, padding=1),
             torch.nn.ReLU(),
-            Conv2d(in_channels=10, out_channels=15, kernel_size=3, stride=2, padding=1)
+            Conv2d(in_channels=10, out_channels=15, kernel_size=5, stride=1, padding=1)
         )
 
-        out_1 = get_out_size(dataset_full.input_size, kernel_size=3, stride=2, padding=1)
-        out_2 = get_out_size(out_1, kernel_size=3, stride=2, padding=1)
-        out_3 = get_out_size(out_2, kernel_size=3, stride=2, padding=1)
+        out_1 = get_out_size(dataset_full.input_size, kernel_size=5, stride=1, padding=1)
+        out_2 = get_out_size(out_1, kernel_size=5, stride=1, padding=1)
+        out_3 = get_out_size(out_2, kernel_size=5, stride=1, padding=1)
 
         self.fc = torch.nn.Linear(
             in_features=15 * out_3 * out_3,
@@ -274,7 +272,7 @@ for epoch in range(1, 100):
             y_idx = y.cpu().data.numpy().argmax(axis=-1)
             w = torch.FloatTensor(dataset_full.Y_weights[y_idx]).unsqueeze(dim=-1).to(DEVICE)
 
-            loss = torch.mean(-y * w * torch.log(y_prim * 1e-8))
+            loss = torch.mean(-y * w * torch.log(y_prim + 1e-8))
 
             if data_loader == dataloader_train:
                 loss.backward()
