@@ -51,6 +51,13 @@ class DatasetApples(torch.utils.data.Dataset):
         self.input_size = self.X.size(-1)
         Y = torch.LongTensor(Y)
         self.Y = Y.unsqueeze(dim=-1)
+        self.training = True
+
+    def train(self):
+        self.training = True
+
+    def eval(self):
+        self.training = False
 
     def __len__(self):
         if MAX_LEN:
@@ -60,7 +67,12 @@ class DatasetApples(torch.utils.data.Dataset):
     def __getitem__(self, idx):
         x = self.X[idx] / 255.0
         y_label = self.Y[idx]
-        y_target = x
+
+        y_target = x.clone()
+        if self.training:
+            noise = torch.rand(x.size())
+            x[noise < 0.1] = 1.0
+
         return x, y_target, y_label
 
 dataset_full = DatasetApples()
@@ -190,6 +202,11 @@ for epoch in range(1, 100):
         stage = 'train'
         if data_loader == data_loader_test:
             stage = 'test'
+            model.eval()
+            dataset_full.eval()
+        else:
+            model.train()
+            dataset_full.train()
 
         for x, y_target, y_label in tqdm(data_loader, desc=stage):
             x = x.to(DEVICE)
